@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Add browser-like User-Agent header to bypass 529 blocks
+    // Fetch website HTML with browser-like User-Agent to bypass restrictions
     const response = await axios.get(url, {
       headers: {
         'User-Agent':
@@ -45,14 +45,18 @@ ${htmlContent}
 
     const resultText = completion.choices[0].message.content;
 
-    // Simple parsing based on expected structure
+    // Extract key data using regex
     const usabilityScoreMatch = resultText.match(/usability score.*?(\d{1,3})/i);
     const issuesMatch = resultText.match(/issues:\s*([\s\S]*?)recommendations:/i);
     const recommendationsMatch = resultText.match(/recommendations:\s*([\s\S]*)/i);
 
     const usabilityScore = usabilityScoreMatch ? parseInt(usabilityScoreMatch[1]) : null;
-    const issues = issuesMatch ? issuesMatch[1].trim().split('\n').map(i => i.replace(/^[-•]\s*/, '')) : [];
-    const recommendations = recommendationsMatch ? recommendationsMatch[1].trim().split('\n').map(r => r.replace(/^[-•]\s*/, '')) : [];
+    const issues = issuesMatch
+      ? issuesMatch[1].trim().split('\n').filter(Boolean).map(i => i.replace(/^[-•]\s*/, ''))
+      : [];
+    const recommendations = recommendationsMatch
+      ? recommendationsMatch[1].trim().split('\n').filter(Boolean).map(r => r.replace(/^[-•]\s*/, ''))
+      : [];
 
     if (!usabilityScore || issues.length === 0 || recommendations.length === 0) {
       throw new Error('Incomplete response from OpenAI');
