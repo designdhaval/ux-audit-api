@@ -17,22 +17,22 @@ export default async function handler(req, res) {
 
   try {
     const prompt = `
-You are a UX expert AI trained on thousands of heuristics, usability principles, and real-world audits.
+You are a UX expert AI trained on thousands of real-world heuristic evaluations.
 
-Perform a heuristic UX audit of this website: ${url}
+Perform a heuristic UX audit for this website: ${url}
 
-Return the following in JSON format:
+Respond in the following raw JSON format:
 {
-  "usabilityScore": [0-100],
-  "issues": ["..."],
-  "recommendations": ["..."]
+  "usabilityScore": [number between 0-100],
+  "issues": ["List of major UX issues"],
+  "recommendations": ["List of specific improvement suggestions"]
 }
 
-Only respond in raw JSON. Do not add any explanation or headings.
+Do not add any extra commentary, only return raw valid JSON.
 `;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-3.5-turbo', // ✅ Fallback to available model
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7
     });
@@ -42,6 +42,7 @@ Only respond in raw JSON. Do not add any explanation or headings.
     const result = JSON.parse(json);
 
     res.status(200).json(result);
+
   } catch (error) {
     console.error('💥 Audit Error:', error);
     res.status(500).json({
