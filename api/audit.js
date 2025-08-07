@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch website HTML with browser-like User-Agent to bypass restrictions
+    // Fetch website HTML with a browser-like User-Agent
     const response = await axios.get(url, {
       headers: {
         'User-Agent':
@@ -45,7 +45,7 @@ ${htmlContent}
 
     const resultText = completion.choices[0].message.content;
 
-    // Extract key data using regex
+    // Extract UX insights using regex
     const usabilityScoreMatch = resultText.match(/usability score.*?(\d{1,3})/i);
     const issuesMatch = resultText.match(/issues:\s*([\s\S]*?)recommendations:/i);
     const recommendationsMatch = resultText.match(/recommendations:\s*([\s\S]*)/i);
@@ -69,7 +69,10 @@ ${htmlContent}
     });
 
   } catch (error) {
-    console.error('Error auditing URL:', error.message);
-    res.status(500).json({ error: 'Failed to audit URL. Please check the input or try again later.' });
+    console.error('💥 FULL ERROR STACK:', error); // Logs everything in Vercel dashboard
+    res.status(500).json({
+      error: 'Failed to audit URL. Please check the input or try again later.',
+      message: error.message // This helps us debug directly in curl
+    });
   }
 }
