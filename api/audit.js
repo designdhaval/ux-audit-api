@@ -1,4 +1,9 @@
 import axios from 'axios';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -7,57 +12,60 @@ export default async function handler(req, res) {
 
   const { url } = req.body;
 
-  if (!url) {
-    return res.status(400).json({ error: 'Missing URL' });
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'Invalid or missing URL' });
   }
 
   try {
-    // 1. Fetch the raw HTML of the target URL
-    const response = await axios.get(url);
-    const html = response.data;
-
-    // 2. Use OpenAI to analyze the HTML
-    const openaiResponse = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a UX expert. Analyze the HTML of a website and return a JSON response with a usabilityScore (out of 100), issues (array of 3 UX issues), and recommendations (array of 3 UX improvements).'
-          },
-          {
-            role: 'user',
-            content: `Here is the HTML:\n\n${html}`
-          }
-        ],
-        temperature: 0.7
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
+    // Add browser-like User-Agent header to bypass 529 blocks
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
-    );
+    });
 
-    // 3. Extract GPT's reply and try to parse it
-    const reply = openaiResponse.data.choices[0].message.content;
+    const htmlContent = response.data;
 
-    // Try to parse JSON block from GPT's response
-    const jsonStart = reply.indexOf('{');
-    const jsonEnd = reply.lastIndexOf('}');
-    const jsonString = reply.slice(jsonStart, jsonEnd + 1);
+    const prompt = `
+You are a UX expert AI. Analyze the following HTML and provide:
+1. A usability score out of 100
+2. A list of major UX issues (bullet points)
+3. A list of recommendations to fix those issues
 
-    const auditResult = JSON.parse(jsonString);
+HTML:
+${htmlContent}
+`;
 
-    res.status(200).json(auditResult);
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7
+    });
+
+    const resultText = completion.choices[0].message.content;
+
+    // Simple parsing based on expected structure
+    const usabilityScoreMatch = resultText.match(/usability score.*?(\d{1,3})/i);
+    const issuesMatch = resultText.match(/issues:\s*([\s\S]*?)recommendations:/i);
+    const recommendationsMatch = resultText.match(/recommendations:\s*([\s\S]*)/i);
+
+    const usabilityScore = usabilityScoreMatch ? parseInt(usabilityScoreMatch[1]) : null;
+    const issues = issuesMatch ? issuesMatch[1].trim().split('\n').map(i => i.replace(/^[-•]\s*/, '')) : [];
+    const recommendations = recommendationsMatch ? recommendationsMatch[1].trim().split('\n').map(r => r.replace(/^[-•]\s*/, '')) : [];
+
+    if (!usabilityScore || issues.length === 0 || recommendations.length === 0) {
+      throw new Error('Incomplete response from OpenAI');
+    }
+
+    res.status(200).json({
+      usabilityScore,
+      issues,
+      recommendations
+    });
+
   } catch (error) {
     console.error('Error auditing URL:', error.message);
-
-    res.status(500).json({
-      error: 'Failed to audit URL. Please check the input or try again later.'
-    });
+    res.status(500).json({ error: 'Failed to audit URL. Please check the input or try again later.' });
   }
 }
